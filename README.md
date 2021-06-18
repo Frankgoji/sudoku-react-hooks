@@ -30,7 +30,7 @@ to render the Sudoku board. The example HTML file would look something like this
     <center>
         <div id="sudoku"></div>
     </center>
-    <script src="index.js"></script>
+    <script src="sudoku.js"></script>
 </body>
 </html>
 ```
