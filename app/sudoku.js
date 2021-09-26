@@ -320,9 +320,13 @@ export const Sudoku = (props) => {
                     for (const [r, row] of newConfig.cells.entries()) {
                         for (const [c, cell] of row.entries()) {
                             const groupNum = getGroup(r, c, 3, 3, newConfig.dimensions);
-                            cell.group = shadedGroups.indexOf(groupNum) !== -1
+                            const isShaded = shadedGroups.indexOf(groupNum) !== -1;
+                            cell.group = isShaded
                                 ? 2             // the shaded third group
                                 : groupNum % 2; // one of the first 2 groups
+                            if (isShaded) {
+                                cell.guess = 0; // make shaded not editable
+                            }
                         }
                     }
                     return newConfig;
