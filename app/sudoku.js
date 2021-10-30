@@ -6,7 +6,8 @@ import React, {
 } from 'react';
 import {
     Controls,
-    useEventListener
+    useEventListener,
+    useInterval
 } from './common.js';
 
 const LOCATIONS = {
@@ -38,6 +39,12 @@ const SELECT_TYPE = {
 };
 
 /**
+ * Returns time in seconds as a string formatted as hh:mm:ss.
+ */
+const pad = t => `${Math.floor(t)}`.padStart(2, '0');
+const displayTime = t => `${t >= 60 * 60 ? pad(t / 60 / 60) + ':' : ''}${pad((t / 60) % 60)}:${pad(t % 60)}`;
+
+/**
  * Assuming a rectangular sudoku board with regular groups of a set width and
  * height, calculate the index of the group of the cell at [r, c].
  */
@@ -47,7 +54,7 @@ const getGroup = (r, c, gHeight, gWidth, dimensions) => {
     return Math.floor(c / gWidth) + numCols * Math.floor(r / gHeight);
 };
 
-const CURR_VER = 1.4;
+const CURR_VER = 1.5;
 
 /**
  * A configurable sudoku board.
@@ -76,9 +83,15 @@ export const Sudoku = (props) => {
                 color: '#ff0000',
                 isSmall: false,
                 editable: true
+            },
+            {
+                color: '#ff0000',
+                isSmall: true,
+                editable: true
             }
         ],
-        type: SUDOKU_TYPES['Default']
+        type: SUDOKU_TYPES['Default'],
+        elapsed: 0
     });
     const [currGuess, setCurrGuess] = useState(0);
     const [chooseCells, setChooseCells] = useState(undefined);
@@ -89,6 +102,15 @@ export const Sudoku = (props) => {
     const fileRef = useRef(null);
     const boardRef = useRef(null);
     const rootRef = useRef(null);
+
+    const [timerStarted, setTimerStarted] = useState(false);
+    const [inFocus, setInFocus] = useState(true);
+    useEventListener('focus', window, true, () => setInFocus(true));
+    useEventListener('blur', window, true, () => setInFocus(false));
+    useInterval(() => {
+        // If incrementElapsed (window in focus and started timer), increment
+        setConfig({...config, elapsed: config.elapsed + 1});
+    }, 1000, inFocus && timerStarted, false);
 
     useEffect(() => {
         resetGroups(config, true);
@@ -128,9 +150,17 @@ export const Sudoku = (props) => {
     };
 
     const cellValCallback = (r, c, val) => {
+        if (!timerStarted && currGuess === 1 && config.type !== SUDOKU_TYPES['Other']) {
+            setTimerStarted(true);
+        }
         const newConfig = {...config};
         const guess = val === '' ? -1 : currGuess;
-        newConfig.cells[r][c].val = val;
+        const isSmall = guess !== -1 && newConfig.guesses[guess].isSmall;
+        newConfig.cells[r][c].val = val.length > 1 && !isSmall
+            ? val[val.length - 1]
+            : isSmall
+                ? val.split('').sort().join('')
+                : val;
         newConfig.cells[r][c].guess = guess;
         setConfig(newConfig);
         validate(newConfig);
@@ -429,6 +459,25 @@ export const Sudoku = (props) => {
                 }
             }
         }
+        if (version < 1.5) {
+            // add new default guess for small guesses
+            // in order to add new guess in right place, it should be index 2, and shift cell guesses appropriately
+            config.guesses.splice(2, 0, {
+                color: '#ff0000',
+                isSmall: true,
+                editable: true
+            });
+            for (const row of config.cells) {
+                for (const cell of row) {
+                    if (cell.guess >= 2) {
+                        cell.guess += 1;
+                    }
+                }
+            }
+
+            // add elapsed field
+            config.elapsed = 0;
+        }
         config.version = CURR_VER;
         return config;
     };
@@ -456,8 +505,9 @@ export const Sudoku = (props) => {
          *     this.state.config.groups validate
          */
         const ops = {firstSquare: [0, 0], sideLength: 9, groups: [3, 3]};
+        const isSmallGuess = (cell) => cell.guess !== -1 && newConfig.guesses[cell.guess].isSmall;
         const allUnique = (cellList) => {
-            const list = cellList.map(cell => cell.val);
+            const list = cellList.map(cell => isSmallGuess(cell) ? '' : cell.val);
             const isUnique = new Set(list.map((v, i) => v !== '' ? v : i)).size === list.length;
             if (!isUnique) {
                 for (const cell of cellList) {
@@ -547,7 +597,11 @@ export const Sudoku = (props) => {
         if (isValid) {
             setValidationState(VALIDATION_MSGS.valid);
             if (isFilled) {
-                setTimeout(() => alert('Congratulations! You completed the sudoku puzzle!'), 250);
+                setTimeout(() =>
+                    alert('Congratulations! You completed the sudoku puzzle!\nTime: ' + displayTime(newConfig.elapsed)),
+                    250
+                );
+                setTimerStarted(false);
             }
         } else {
             setValidationState(VALIDATION_MSGS.error);
@@ -875,6 +929,11 @@ const Board = React.forwardRef((props, ref) => {
  * onMouseUp - mouse up event for drag
  */
 const Cell = (props) => {
+    // In some cases changing value will lose focus, refocus on change
+    useEffect(() => {
+        const [r, c] = props.coords;
+        document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
+    }, [props.config.val]);
 
     const corners = [
         LOCATIONS.UPPER_LEFT,
@@ -959,16 +1018,16 @@ const Cell = (props) => {
             const [height, width] = props.dimensions.map(dim => Number(dim));
             const mod = (m, n) => ((m % n) + n) % n;
             let r1, c1;
-            if (e.keyCode === 38) {
+            if (e.key === 'ArrowUp') {
                 // go up or wrap
                 [r1, c1] = [mod(r - 1, height), c];
-            } else if (e.keyCode === 40) {
+            } else if (e.key === 'ArrowDown') {
                 // go down or wrap
                 [r1, c1] = [mod(r + 1, height), c];
-            } else if (e.keyCode === 37) {
+            } else if (e.key === 'ArrowLeft') {
                 // go left or wrap
                 [r1, c1] = [r, mod(c - 1, width)];
-            } else if (e.keyCode === 39) {
+            } else if (e.key === 'ArrowRight') {
                 // go right or wrap
                 [r1, c1] = [r, mod(c + 1, width)];
             }
@@ -1013,6 +1072,8 @@ const Cell = (props) => {
         style.color = guess.color;
     }
 
+    const isSmall = (props.config.guess !== -1 && props.board.guesses[props.config.guess].isSmall) ||
+        (props.config.guess === -1 && props.currGuess !== -1 && props.board.guesses[props.currGuess].isSmall);
     const [height, width] = props.dimensions;
     const div = document.getElementById(divId);
     if (r === 0 && c === 0 && div) {
@@ -1050,16 +1111,32 @@ const Cell = (props) => {
                     cells={props.board.cells}
                     dimensions={props.dimensions} />
             ))}
-            <input type="text"
-                id={id}
-                className={cellClasses()}
-                style={style}
-                value={props.config.val}
-                onChange={(e) => {
-                    props.cellValCallback(r, c, e.target.value);
-                }}
-                onKeyDown={keyDown('input')}
-                disabled={!editable} />
+            {!isSmall && (
+                <input type="text"
+                    id={id}
+                    className={cellClasses()}
+                    style={style}
+                    value={props.config.val}
+                    onChange={(e) => {
+                        props.cellValCallback(r, c, e.target.value);
+                    }}
+                    onKeyDown={keyDown('input')}
+                    disabled={!editable} />
+            )}
+            {isSmall && (
+                <textarea
+                    id={id}
+                    className={cellClasses()}
+                    style={style}
+                    value={props.config.val}
+                    onChange={(e) => {
+                        props.cellValCallback(r, c, e.target.value);
+                    }}
+                    onKeyDown={keyDown('input')}
+                    disabled={!editable}
+                    rows={3}
+                    cols={3} />
+            )}
         </div>
     );
 }
@@ -1326,7 +1403,7 @@ const SudokuControls = (props) => {
                                         Editable: <input type="checkbox" checked={props.guesses[i].editable} onChange={(e) => setGuessCheck(i, 'editable', e.target.checked)} />
                                     </div>
                                     <div>
-                                        {(i > 1) && <button onClick={() => props.deleteGuess(i)}>Delete</button>}
+                                        {(i > 2) && <button onClick={() => props.deleteGuess(i)}>Delete</button>}
                                         {<button onClick={() => props.clearGuess(i)}>Clear</button>}
                                     </div>
                                 </div>
