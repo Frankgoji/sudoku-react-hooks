@@ -931,8 +931,10 @@ const Board = React.forwardRef((props, ref) => {
 const Cell = (props) => {
     // In some cases changing value will lose focus, refocus on change
     useEffect(() => {
-        const [r, c] = props.coords;
-        document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
+        if (props.config.val) {
+            const [r, c] = props.coords;
+            document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
+        }
     }, [props.config.val]);
 
     const corners = [
