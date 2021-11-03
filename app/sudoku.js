@@ -631,15 +631,14 @@ export const Sudoku = (props) => {
                        selectedCellsCB={selectedCellsCB}
                        validationHidden={validationHidden}
                        currGuess={currGuess}
+                       setCurrGuess={setCurrGuess}
                        rootRef={rootRef} />
             </div>
             <div>
                 <SudokuControls guesses={config.guesses}
                                 currGuess={currGuess}
                                 setGuesses={setGuesses}
-                                setCurrGuess={(guess) => {
-                                    setCurrGuess(guess);
-                                }}
+                                setCurrGuess={setCurrGuess}
                                 deleteGuess={deleteGuess}
                                 clearGuess={clearGuess}
                                 dimensions={config.dimensions}
@@ -707,6 +706,7 @@ export const Sudoku = (props) => {
  * selectedCellsCB - set selected cells
  * validationHidden - bool if validation is hidden
  * currGuess - current guess
+ * setCurrGuess - set current guess
  * rootRef - reference to the root div
  */
 const Board = React.forwardRef((props, ref) => {
@@ -885,6 +885,7 @@ const Board = React.forwardRef((props, ref) => {
                                       dragSelection={dragSelection}
                                       checkCells={checkCells}
                                       currGuess={props.currGuess}
+                                      setCurrGuess={props.setCurrGuess}
                                       listenMouseMove={listenMouseMove}
                                       onMouseUp={onMouseUp} />
                             );
@@ -925,6 +926,7 @@ const Board = React.forwardRef((props, ref) => {
  * dragSelection - selection of drag
  * checkCells - function to check current drag selection
  * currGuess - current guess
+ * setCurrGuess - set current guess
  * listenMouseMove - adds mousemove event listener
  * onMouseUp - mouse up event for drag
  */
@@ -936,6 +938,18 @@ const Cell = (props) => {
             document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
         }
     }, [props.config.val]);
+
+    const [keys, setKeys] = useState({});
+
+    // Changing the current guess may also lose focus
+    const [didHotKey, setDidHotKey] = useState(false);
+    useEffect(() => {
+        if (didHotKey) {
+            const [r, c] = props.coords;
+            document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
+            setDidHotKey(false);
+        }
+    }, [props.currGuess]);
 
     const corners = [
         LOCATIONS.UPPER_LEFT,
@@ -1041,8 +1055,30 @@ const Cell = (props) => {
                 if (origin === 'input') {
                     e.stopPropagation();
                 }
+            } else {
+                // Alt+NUM hotkey to set guess
+                const newKeys = {...keys};
+                newKeys[e.key] = true;
+                setKeys(newKeys);
+
+                const numsPressed = Object.entries(newKeys)
+                    .filter(([k, v]) => !isNaN(k))
+                    .map(([k, v]) => k);
+
+                if (newKeys['Alt'] && numsPressed.length > 0) {
+                    const newGuess = Number(numsPressed[0]);
+                    props.setCurrGuess(newGuess);
+                    setKeys({});
+                    setDidHotKey(true);
+                }
             }
         };
+    };
+
+    const keyUp = (e) => {
+        const newKeys = {...keys};
+        delete newKeys[e.key];
+        setKeys(newKeys);
     };
 
     const onMouseDown = (e) => {
@@ -1103,6 +1139,7 @@ const Cell = (props) => {
             className={divClasses()}
             onClick={selectCell}
             onKeyDown={keyDown('div')}
+            onKeyUp={keyUp}
             onMouseDown={onMouseDown}
             onMouseUp={props.onMouseUp}
             tabIndex={0}>
@@ -1123,6 +1160,7 @@ const Cell = (props) => {
                         props.cellValCallback(r, c, e.target.value);
                     }}
                     onKeyDown={keyDown('input')}
+                    onKeyUp={keyUp}
                     disabled={!editable} />
             )}
             {isSmall && (
@@ -1135,6 +1173,7 @@ const Cell = (props) => {
                         props.cellValCallback(r, c, e.target.value);
                     }}
                     onKeyDown={keyDown('input')}
+                    onKeyUp={keyUp}
                     disabled={!editable}
                     rows={3}
                     cols={3} />
@@ -1338,7 +1377,7 @@ const SudokuControls = (props) => {
                 onClick: () => showContent('dimensions')
             },
             {
-                name: 'Guesses',
+                name: `Guesses: ${props.currGuess}`,
                 id: 'guesses',
                 onClick: () => showContent('guesses')
             },
