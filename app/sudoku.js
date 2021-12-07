@@ -526,7 +526,8 @@ export const Sudoku = (props) => {
             for (const fullRow of rowSlice) {
                 const row = fullRow.slice(firstCol, firstCol + sideLength);
                 isValid = allUnique(row) && isValid;
-                isFilled = isFilled && row.find(cell => cell.val === '') === undefined;
+                // Empty cells or filled with small guesses are "not filled"
+                isFilled = isFilled && row.find(cell => cell.val === '' || isSmallGuess(cell)) === undefined;
             }
             // validate all cols
             for (let c = firstCol; c < firstCol + sideLength; c++) {
@@ -1067,7 +1068,9 @@ const Cell = (props) => {
 
                 if (newKeys['Alt'] && numsPressed.length > 0) {
                     const newGuess = Number(numsPressed[0]);
-                    props.setCurrGuess(newGuess);
+                    if (newGuess < props.board.guesses.length) {
+                        props.setCurrGuess(newGuess);
+                    }
                     setKeys({});
                     setDidHotKey(true);
                 }
