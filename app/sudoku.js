@@ -38,6 +38,11 @@ const SELECT_TYPE = {
     SUB: 'sub'
 };
 
+const UNDO = {
+    FULL: 'full',
+    DIFF: 'diff'
+};
+
 /**
  * Returns time in seconds as a string formatted as hh:mm:ss.
  */
@@ -116,6 +121,14 @@ export const Sudoku = (props) => {
         resetGroups(config, true);
     }, []);
 
+    const cellOrDiv = (r, c) => {
+        const guessIndex = config.cells[r][c].guess;
+        const readOnly = guessIndex !== -1
+            && currGuess !== guessIndex
+            && !config.guesses[guessIndex].editable;
+        return readOnly ? 'div' : 'cell';
+    };
+
     const setGuesses = (guesses) => {
         setConfig({...config, guesses});
     };
@@ -137,6 +150,7 @@ export const Sudoku = (props) => {
     /* If a cell has this guess, set val to '' */
     const clearGuess = (i) => {
         const newConfig = {...config};
+        const prevCells = JSON.parse(JSON.stringify(config.cells));
         for (const row of newConfig.cells) {
             for (const cell of row) {
                 if (cell.guess === i) {
@@ -145,6 +159,7 @@ export const Sudoku = (props) => {
                 }
             }
         }
+        addUndoFull(prevCells, newConfig.cells);
         setConfig(newConfig);
         validate(newConfig);
     };
@@ -153,6 +168,7 @@ export const Sudoku = (props) => {
         if (!timerStarted && currGuess === 1 && config.type !== SUDOKU_TYPES['Other']) {
             setTimerStarted(true);
         }
+        const prevVal = config.cells[r][c].val;
         const newConfig = {...config};
         const guess = val === '' ? -1 : currGuess;
         const isSmall = guess !== -1 && newConfig.guesses[guess].isSmall;
@@ -163,6 +179,7 @@ export const Sudoku = (props) => {
                 : val;
         newConfig.cells[r][c].guess = guess;
         setConfig(newConfig);
+        addUndoDiff([r, c], prevVal, newConfig.cells[r][c].val);
         validate(newConfig);
     };
 
@@ -369,6 +386,7 @@ export const Sudoku = (props) => {
                 break;
         }
         setConfig(conf => ({...conf, type}));
+        resetUndo();
     };
 
     const save = () => {
@@ -385,6 +403,7 @@ export const Sudoku = (props) => {
             const newConfig = JSON.parse(text);
             newConfig.fileName = file.name;
             setConfig(upgrade(newConfig));
+            resetUndo();
         });
     };
 
@@ -614,6 +633,80 @@ export const Sudoku = (props) => {
         setValidationHidden(validationHidden => !validationHidden);
     };
 
+    const [undoHistory, setUndoHistory] = useState([]);
+    const [undoIndex, setUndoIndex] = useState(-1);
+
+    const undo = () => {
+        if (undoIndex > -1) {
+            const currUndo = undoHistory[undoIndex];
+            const {type} = currUndo;
+            if (type === UNDO.FULL) {
+                const newConfig = {...config, cells: [...currUndo.prevCells]};
+                setConfig(newConfig);
+                validate(newConfig);
+            } else {
+                const { coords, prevVal } = currUndo;
+                const [r, c] = coords;
+                const prevCells = [...config.cells];
+                prevCells[r][c].val = prevVal;
+                const newConfig = {...config, cells: prevCells};
+                setConfig(newConfig);
+                validate(newConfig);
+                document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
+            }
+            setUndoIndex(undoIndex - 1);
+        }
+    };
+
+    const redo = () => {
+        if (undoIndex < undoHistory.length - 1) {
+            const newUndoIndex = undoIndex + 1;
+            setUndoIndex(newUndoIndex);
+            const currUndo = undoHistory[newUndoIndex];
+            const {type} = currUndo;
+            if (type === UNDO.FULL) {
+                const newConfig = {...config, cells: [...currUndo.newCells]};
+                setConfig(newConfig);
+                validate(newConfig)
+            } else {
+                const { coords, newVal } = currUndo;
+                const [r, c] = coords;
+                const newCells = [...config.cells];
+                newCells[r][c].val = newVal;
+                const newConfig = {...config, cells: newCells};
+                setConfig(newConfig);
+                validate(newConfig)
+                document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
+            }
+        }
+    };
+
+    const addUndoFull = (prevCells, newCells) => {
+        const newUndo = undoHistory.slice(0, undoIndex + 1).concat({
+            type: UNDO.FULL,
+            prevCells: [...prevCells],
+            newCells: [...newCells]
+        });
+        setUndoHistory(newUndo);
+        setUndoIndex(undoIndex + 1);
+    };
+
+    const addUndoDiff = (coords, prevVal, newVal) => {
+        const newUndo = undoHistory.slice(0, undoIndex + 1).concat({
+            type: UNDO.DIFF,
+            coords,
+            prevVal,
+            newVal
+        });
+        setUndoHistory(newUndo);
+        setUndoIndex(undoIndex + 1);
+    };
+
+    const resetUndo = () => {
+        setUndoHistory([]);
+        setUndoIndex(-1);
+    };
+
     return (
         <div className="root"
              onMouseUp={boardRef.current && ((e) => boardRef.current.onMouseUp(e))}
@@ -633,7 +726,9 @@ export const Sudoku = (props) => {
                        validationHidden={validationHidden}
                        currGuess={currGuess}
                        setCurrGuess={setCurrGuess}
-                       rootRef={rootRef} />
+                       rootRef={rootRef}
+                       undo={undo}
+                       redo={redo} />
             </div>
             <div>
                 <SudokuControls guesses={config.guesses}
@@ -888,7 +983,9 @@ const Board = React.forwardRef((props, ref) => {
                                       currGuess={props.currGuess}
                                       setCurrGuess={props.setCurrGuess}
                                       listenMouseMove={listenMouseMove}
-                                      onMouseUp={onMouseUp} />
+                                      onMouseUp={onMouseUp}
+                                      undo={props.undo}
+                                      redo={props.redo} />
                             );
                         })}
                     </div>
@@ -939,8 +1036,6 @@ const Cell = (props) => {
             document.getElementById(`${cellOrDiv(r, c)}_${r}_${c}`).focus();
         }
     }, [props.config.val]);
-
-    const [keys, setKeys] = useState({});
 
     // Changing the current guess may also lose focus
     const [didHotKey, setDidHotKey] = useState(false);
@@ -1056,32 +1151,21 @@ const Cell = (props) => {
                 if (origin === 'input') {
                     e.stopPropagation();
                 }
-            } else {
+            } else if (!isNaN(e.key) && e.altKey) {
                 // Alt+NUM hotkey to set guess
-                const newKeys = {...keys};
-                newKeys[e.key] = true;
-                setKeys(newKeys);
-
-                const numsPressed = Object.entries(newKeys)
-                    .filter(([k, v]) => !isNaN(k))
-                    .map(([k, v]) => k);
-
-                if (newKeys['Alt'] && numsPressed.length > 0) {
-                    const newGuess = Number(numsPressed[0]);
-                    if (newGuess < props.board.guesses.length) {
-                        props.setCurrGuess(newGuess);
-                    }
-                    setKeys({});
-                    setDidHotKey(true);
+                const newGuess = Number(e.key);
+                if (newGuess < props.board.guesses.length) {
+                    props.setCurrGuess(newGuess);
                 }
+                setDidHotKey(true);
+            } else if (e.key === 'z' && e.ctrlKey && !e.shiftKey) {
+                e.preventDefault();
+                props.undo();
+            } else if (e.key === 'Z' && e.ctrlKey && e.shiftKey) {
+                e.preventDefault();
+                props.redo();
             }
         };
-    };
-
-    const keyUp = (e) => {
-        const newKeys = {...keys};
-        delete newKeys[e.key];
-        setKeys(newKeys);
     };
 
     const onMouseDown = (e) => {
@@ -1142,7 +1226,6 @@ const Cell = (props) => {
             className={divClasses()}
             onClick={selectCell}
             onKeyDown={keyDown('div')}
-            onKeyUp={keyUp}
             onMouseDown={onMouseDown}
             onMouseUp={props.onMouseUp}
             tabIndex={0}>
@@ -1163,7 +1246,6 @@ const Cell = (props) => {
                         props.cellValCallback(r, c, e.target.value);
                     }}
                     onKeyDown={keyDown('input')}
-                    onKeyUp={keyUp}
                     disabled={!editable} />
             )}
             {isSmall && (
@@ -1176,7 +1258,6 @@ const Cell = (props) => {
                         props.cellValCallback(r, c, e.target.value);
                     }}
                     onKeyDown={keyDown('input')}
-                    onKeyUp={keyUp}
                     disabled={!editable}
                     rows={3}
                     cols={3} />
