@@ -164,6 +164,18 @@ export const Sudoku = (props) => {
         validate(newConfig);
     };
 
+    /* Calculate which letter to show for the value */
+    const diff = (oldVal, newVal) => {
+        if (newVal.length >= oldVal.length) {
+            for (const l of newVal) {
+                if (!oldVal.includes(l)) {
+                    return l;
+                }
+            }
+        }
+        return newVal[newVal.length - 1];
+    };
+
     const cellValCallback = (r, c, val) => {
         if (!timerStarted && currGuess === 1 && config.type !== SUDOKU_TYPES['Other']) {
             setTimerStarted(true);
@@ -173,7 +185,7 @@ export const Sudoku = (props) => {
         const guess = val === '' ? -1 : currGuess;
         const isSmall = guess !== -1 && newConfig.guesses[guess].isSmall;
         newConfig.cells[r][c].val = val.length > 1 && !isSmall
-            ? val[val.length - 1]
+            ? diff(prevVal, val)
             : isSmall
                 ? val.split('').sort().join('')
                 : val;
