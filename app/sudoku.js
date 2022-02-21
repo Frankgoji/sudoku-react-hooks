@@ -189,9 +189,10 @@ export const Sudoku = (props) => {
             : isSmall
                 ? val.split('').sort().join('')
                 : val;
+        const prevGuess = newConfig.cells[r][c].guess;
         newConfig.cells[r][c].guess = guess;
         setConfig(newConfig);
-        addUndoDiff([r, c], prevVal, newConfig.cells[r][c].val);
+        addUndoDiff([r, c], prevVal, newConfig.cells[r][c].val, prevGuess, guess);
         validate(newConfig);
     };
 
@@ -657,10 +658,11 @@ export const Sudoku = (props) => {
                 setConfig(newConfig);
                 validate(newConfig);
             } else {
-                const { coords, prevVal } = currUndo;
+                const { coords, prevVal, prevGuess } = currUndo;
                 const [r, c] = coords;
                 const prevCells = [...config.cells];
                 prevCells[r][c].val = prevVal;
+                prevCells[r][c].guess = prevGuess;
                 const newConfig = {...config, cells: prevCells};
                 setConfig(newConfig);
                 validate(newConfig);
@@ -681,10 +683,11 @@ export const Sudoku = (props) => {
                 setConfig(newConfig);
                 validate(newConfig)
             } else {
-                const { coords, newVal } = currUndo;
+                const { coords, newVal, newGuess } = currUndo;
                 const [r, c] = coords;
                 const newCells = [...config.cells];
                 newCells[r][c].val = newVal;
+                newCells[r][c].guess = newGuess;
                 const newConfig = {...config, cells: newCells};
                 setConfig(newConfig);
                 validate(newConfig)
@@ -703,12 +706,14 @@ export const Sudoku = (props) => {
         setUndoIndex(undoIndex + 1);
     };
 
-    const addUndoDiff = (coords, prevVal, newVal) => {
+    const addUndoDiff = (coords, prevVal, newVal, prevGuess, newGuess) => {
         const newUndo = undoHistory.slice(0, undoIndex + 1).concat({
             type: UNDO.DIFF,
             coords,
             prevVal,
-            newVal
+            newVal,
+            prevGuess,
+            newGuess
         });
         setUndoHistory(newUndo);
         setUndoIndex(undoIndex + 1);
@@ -767,7 +772,9 @@ export const Sudoku = (props) => {
                                 fileName={config.fileName}
                                 fileRef={fileRef}
                                 save={save}
-                                load={load} />
+                                load={load}
+                                undo={undo}
+                                redo={redo} />
             </div>
         </div>
     );
@@ -1375,6 +1382,8 @@ const Corner = (props) => {
  * fileRef - ref to file upload widget
  * save - save config function
  * load - load config function
+ * undo - perform undo
+ * redo - perform redo
  */
 const SudokuControls = (props) => {
     const [width, setWidth] = useState(0);
@@ -1509,6 +1518,20 @@ const SudokuControls = (props) => {
                 name: 'Load',
                 id: 'load',
                 onClick: () => showContent('load')
+            },
+            {
+                name: '⇦',
+                id: 'undo',
+                onClick: () => props.undo(),
+                className: 'undo_button',
+                liClassName: 'undo_li'
+            },
+            {
+                name: '⇨',
+                id: 'redo',
+                onClick: () => props.redo(),
+                className: 'redo_button',
+                liClassName: 'redo_li'
             }
         ];
     };

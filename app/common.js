@@ -68,7 +68,9 @@ export const useInterval = (callback, delay, shouldSet, callImmediately) => {
  *         name: string
  *         id: string,
  *         onClick: function,
- *         disabled: boolean
+ *         disabled: boolean,
+ *         className: string,
+ *         liClassName: string
  *     }
  * contents - a dictionary of ids: function() that will return the content
  * selectedHeader - id of the header that is currently selected, '' if none
@@ -78,9 +80,9 @@ export const Controls = (props) => {
     const header = (
         <div className="header controls_contents">
             {props.headers.map((obj) => (
-                <li key={obj.id}>
+                <li key={obj.id} className={obj.liClassName}>
                     <button onClick={obj.onClick}
-                            className={obj.id === selectedHeader ? 'selected' : ''}
+                            className={(obj.id === selectedHeader ? 'selected' : '') + ' ' + obj.className}
                             disabled={obj.disabled}>
                         {obj.name}
                     </button>
