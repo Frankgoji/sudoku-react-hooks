@@ -875,8 +875,8 @@ const Board = React.forwardRef((props, ref) => {
             return;
         }
 
-        const [cellHeight, cellWidth] = props.config.dimensions.map((dim, i) =>
-            (lowerRight[i] - upperLeft[i]) / dim);
+        const [height, width] = props.config.dimensions;
+        const [cellHeight, cellWidth] = [(lY - uY) / height, (lX - uX) / width];
         const [firstR, firstC] = [
             Math.floor((Math.min(y1, y2) - uY) / cellHeight),
             Math.floor((Math.min(x1, x2) - uX) / cellWidth)
